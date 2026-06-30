@@ -1,3 +1,4 @@
+require('dotenv').config();
 const app = require('./app');
 const { connectDB } = require('./database/connection');
 const { connectRedis } = require('./config/redis');
@@ -22,7 +23,7 @@ const startServer = async () => {
 startServer();
 
 process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  logger.error('Unhandled Rejection:', reason);
 });
 
 process.on('uncaughtException', (error) => {
