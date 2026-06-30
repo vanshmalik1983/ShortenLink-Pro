@@ -20,79 +20,106 @@ const redirectRoutes = require('./routes/redirect.routes');
 
 const app = express();
 
-// Security headers
-app.use(helmet({
-  contentSecurityPolicy: false,
-  crossOriginEmbedderPolicy: false,
-}));
+/* =========================
+   SECURITY HEADERS
+========================= */
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
 
-// 🔥 FIXED CORS CONFIG (IMPORTANT)
+/* =========================
+   CORS CONFIG (FIXED)
+========================= */
+
 const allowedOrigins = [
   process.env.CLIENT_URL,
   'http://localhost:5173',
   'http://localhost:3000',
   'https://shorten-link-pro.vercel.app'
-];
+].filter(Boolean);
 
-app.use(cors({
-  origin: function (origin, callback) {
-    // allow server-to-server or mobile apps (no origin)
-    if (!origin) return callback(null, true);
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // allow tools like Postman / server-to-server
+      if (!origin) return callback(null, true);
 
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
 
-    return callback(new Error('CORS blocked for origin: ' + origin));
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+      console.log('❌ CORS blocked origin:', origin);
+      return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
+
+/* =========================
+   PRE-FLIGHT REQUEST FIX
+========================= */
+app.options('*', cors({
+  origin: allowedOrigins,
+  credentials: true
 }));
 
-// Handle preflight requests explicitly
-app.options('*', cors());
-
-// Middleware
+/* =========================
+   MIDDLEWARES
+========================= */
 app.use(compression());
 
 if (process.env.NODE_ENV !== 'test') {
-  app.use(morgan('combined', {
-    stream: { write: (msg) => logger.http(msg.trim()) },
-  }));
+  app.use(
+    morgan('combined', {
+      stream: {
+        write: (msg) => logger.http(msg.trim()),
+      },
+    })
+  );
 }
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(mongoSanitize());
 
-// Rate limiting
+/* =========================
+   RATE LIMITING
+========================= */
 app.use('/api', apiLimiter);
 
-// Health check
+/* =========================
+   HEALTH CHECK
+========================= */
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
   });
 });
 
-// =====================
-// ROUTES (IMPORTANT FIX)
-// =====================
-
-// OPTION 1 (RECOMMENDED): keep /api prefix
+/* =========================
+   API ROUTES
+========================= */
 app.use('/api/auth', authRoutes);
 app.use('/api/urls', urlRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
 
-// Redirect routes (must stay last)
+/* =========================
+   REDIRECT ROUTES (LAST)
+========================= */
 app.use('/', redirectRoutes);
 
-// Error handling
+/* =========================
+   ERROR HANDLING
+========================= */
 app.use(notFound);
 app.use(errorHandler);
 
