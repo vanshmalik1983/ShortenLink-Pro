@@ -1,9 +1,10 @@
 import axios from 'axios'
-import toast from 'react-hot-toast'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
-  headers: { 'Content-Type': 'application/json' },
+  baseURL: `${import.meta.env.VITE_API_URL}/api`,
+  headers: {
+    'Content-Type': 'application/json',
+  },
   withCredentials: true,
 })
 
@@ -11,33 +12,40 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('accessToken')
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+
     return config
   },
   (error) => Promise.reject(error)
 )
 
-// Refresh handling
 let isRefreshing = false
 let failedQueue = []
 
 const processQueue = (error, token = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) prom.reject(error)
-    else prom.resolve(token)
+  failedQueue.forEach((promise) => {
+    if (error) {
+      promise.reject(error)
+    } else {
+      promise.resolve(token)
+    }
   })
+
   failedQueue = []
 }
 
-// Response interceptor
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry
+    ) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject })
@@ -55,34 +63,37 @@ api.interceptors.response.use(
       const refreshToken = localStorage.getItem('refreshToken')
 
       if (!refreshToken) {
-        isRefreshing = false
         clearAuth()
         window.location.href = '/login'
         return Promise.reject(error)
       }
 
       try {
-        // IMPORTANT FIX: use backend URL, not /api
-        const { data } = await axios.post(
-          `${import.meta.env.VITE_API_URL}/api/auth/refresh`,
-          { refreshToken }
-        )
+        const { data } = await api.post('/auth/refresh', {
+          refreshToken,
+        })
 
-        const { accessToken, refreshToken: newRefreshToken } = data.data
+        const {
+          accessToken,
+          refreshToken: newRefreshToken,
+        } = data.data
 
         localStorage.setItem('accessToken', accessToken)
         localStorage.setItem('refreshToken', newRefreshToken)
 
-        api.defaults.headers.Authorization = `Bearer ${accessToken}`
         processQueue(null, accessToken)
 
         originalRequest.headers.Authorization = `Bearer ${accessToken}`
+
         return api(originalRequest)
-      } catch (refreshError) {
-        processQueue(refreshError, null)
+      } catch (err) {
+        processQueue(err)
+
         clearAuth()
+
         window.location.href = '/login'
-        return Promise.reject(refreshError)
+
+        return Promise.reject(err)
       } finally {
         isRefreshing = false
       }
@@ -92,7 +103,7 @@ api.interceptors.response.use(
   }
 )
 
-const clearAuth = () => {
+function clearAuth() {
   localStorage.removeItem('accessToken')
   localStorage.removeItem('refreshToken')
   localStorage.removeItem('user')
