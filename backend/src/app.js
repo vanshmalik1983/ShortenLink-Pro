@@ -34,24 +34,35 @@ app.use(
    CORS CONFIG (FIXED)
 ========================= */
 
+/* =========================
+   CORS CONFIG
+========================= */
+
 const allowedOrigins = [
   process.env.CLIENT_URL,
   'http://localhost:5173',
   'http://localhost:3000',
-  'https://shorten-link-pro.vercel.app'
 ].filter(Boolean);
 
 app.use(
   cors({
-    origin: function (origin, callback) {
-      // allow tools like Postman / server-to-server
-      if (!origin) return callback(null, true);
+    origin(origin, callback) {
+      // Allow Postman, curl, server-to-server
+      if (!origin) {
+        return callback(null, true);
+      }
 
+      // Allow configured origins
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
-      console.log('❌ CORS blocked origin:', origin);
+      // Allow ALL Vercel deployments (production + preview)
+      if (origin.endsWith('.vercel.app')) {
+        return callback(null, true);
+      }
+
+      console.log('❌ CORS Blocked:', origin);
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
@@ -59,6 +70,9 @@ app.use(
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
+
+// Handle preflight requests
+app.options('*', cors());
 
 /* =========================
    PRE-FLIGHT REQUEST FIX
